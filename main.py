@@ -8,10 +8,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 # Try hardware bindings
 try:
-    from rgbmatrix import RGBMatrix, RGBMatrixOptions
+    from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 except Exception:
     RGBMatrix = None
     RGBMatrixOptions = None
+    graphics = None
 
 try:
     import serial
@@ -24,9 +25,10 @@ except Exception:
     GPIO = None
 
 SETLIST_PATH = os.path.join(os.path.dirname(__file__), "setlist.json")
-FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-LARGE_FONT_SIZE = 10  # Reduced from 12 for better fit
-SMALL_FONT_SIZE = 8   # Reduced from 10 for better fit
+# Use BDF fonts designed for LED matrices instead of TrueType
+BDF_FONT_DIR = "/home/tjone/rpi-rgb-led-matrix/fonts/"
+LARGE_FONT_FILE = "6x10.bdf"  # Good readability on 2.5mm pitch LED matrix
+SMALL_FONT_FILE = "6x10.bdf"  # Same font for consistency
 
 if RGBMatrixOptions is None:
     raise SystemExit("rgbmatrix binding not found in venv; install it before running.")
@@ -38,7 +40,7 @@ options.chain_length = 1
 options.parallel = 1
 options.gpio_slowdown = 2
 options.hardware_mapping = 'adafruit-hat'
-options.brightness = 40
+options.brightness = 60  # Brighter for better LED readability
 
 matrix = RGBMatrix(options=options)
 canvas = matrix.CreateFrameCanvas()
@@ -92,109 +94,109 @@ def draw_screen():
     global canvas, idx, scroll_offset, last_song_change, scroll_start_time
     with lock:
         song = setlist[idx]
-    img = Image.new("RGB", (options.cols, options.rows))
-    draw = ImageDraw.Draw(img)
-    try:
-        f_large = ImageFont.truetype(FONT_PATH, LARGE_FONT_SIZE)
-        f_small = ImageFont.truetype(FONT_PATH, SMALL_FONT_SIZE)
-    except Exception:
-        f_large = ImageFont.load_default()
-        f_small = ImageFont.load_default()
     
     title = song.get("title", "Untitled")
     key = song.get("key", "")
     capo = song.get("capo", 0)
     
-    # Check if title fits on screen
-    title_width, title_height = _text_size(draw, title, f_large)
-    max_title_width = options.cols - 2  # Leave 1 pixel margin on each side
+    try:
+        # Load BDF fonts optimized for LED matrices
+        font_large = graphics.Font()
+        font_large.LoadFont(BDF_FONT_DIR + LARGE_FONT_FILE)
+        
+        font_small = graphics.Font()  
+        font_small.LoadFont(BDF_FONT_DIR + SMALL_FONT_FILE)
+        
+        # Create colors
+        red = graphics.Color(255, 0, 0)
+        orange = graphics.Color(255, 128, 0)
+        
+    except Exception as e:
+        print(f"❌ Font loading failed: {e}")
+        return
+    
+    # Calculate actual title width for scrolling using temporary canvas
+    temp_canvas = matrix.CreateFrameCanvas()
+    title_width = graphics.DrawText(temp_canvas, font_large, 0, 12, red, title)
+    max_title_width = options.cols - 2
     
     current_time = time.time()
     
-    # Reset scrolling when song changes
-    if current_time - last_song_change > 0.5:  # Song changed
-        scroll_offset = 0
-        scroll_start_time = None
-        last_song_change = current_time
-    
     # Handle scrolling for long titles
     if title_width > max_title_width:
-        # Start scrolling after 2 second delay
+        # Start scrolling after 2 second delay from when song was last changed
         if scroll_start_time is None:
             if current_time - last_song_change >= 2.0:
                 scroll_start_time = current_time
+                scroll_offset = 0
         
         if scroll_start_time is not None:
-            # Scroll slowly - move 1 pixel every 200ms
+            # Scroll slower - 3 pixels per second for smoother appearance
             scroll_duration = current_time - scroll_start_time
-            scroll_offset = int(scroll_duration * 5)  # 5 pixels per second
+            scroll_offset = int(scroll_duration * 3)
             
             # Reset scroll when we've gone too far
             if scroll_offset > title_width - max_title_width + 20:
-                scroll_offset = -(max_title_width // 2)  # Pause before restarting
+                scroll_offset = 0  # Start over
                 scroll_start_time = current_time
     else:
         scroll_offset = 0
     
-    # Draw title in bright red - with scrolling if needed
-    title_x = 1 - scroll_offset
-    draw.text((title_x, 1), title, font=f_large, fill=(255,0,0))
+    # Clear canvas for this frame
+    canvas.Clear()
     
-    # Draw key and capo info on second line in orange-red
+    # Draw title with BDF font - much cleaner on LED matrix
+    title_x = 1 - scroll_offset
+    graphics.DrawText(canvas, font_large, title_x, 12, red, title)
+    
+    # Draw key and capo info - simplified format
     if key or capo:
-        key_capo_text = f"Key: {key}" if key else ""
+        # Simple format: "G 3" or "G" or "3"
+        parts = []
+        if key:
+            parts.append(key)
         if capo:
-            if key:
-                key_capo_text += f"  Capo: {capo}"
-            else:
-                key_capo_text = f"Capo: {capo}"
+            parts.append(str(capo))
+        key_capo_text = " ".join(parts)
         
-        draw.text((1, 14), key_capo_text, font=f_small, fill=(255,64,0))
-
-    # Ensure a compatible Pillow Image object for rgbmatrix bindings
-    try:
-        img = img.convert("RGB")
-    except Exception:
-        pass
-
-    # Handle Pillow 11+ compatibility issue - use pixel-by-pixel copy
-    # The new Pillow version removed the internal API that rgbmatrix uses
-    print("Using Pillow 11+ compatible pixel-by-pixel method")
-    try:
-        for y in range(img.height):
-            for x in range(img.width):
-                r, g, b = img.getpixel((x, y))
-                canvas.SetPixel(x, y, r, g, b)
-        print("✅ Display updated successfully")
-    except Exception as e:
-        print(f"❌ Pixel-by-pixel method failed: {repr(e)}")
-        return
-
+        graphics.DrawText(canvas, font_small, 1, 25, orange, key_capo_text)
+    
+    # Use double-buffering to eliminate flashing
+    # SwapOnVSync waits for vertical sync before displaying, preventing flicker
     matrix.SwapOnVSync(canvas)
+    print(f"📺 Flicker-free Display: '{title}' at ({title_x}, 12)")
 
 def show_current():
+    """Display current song"""
+    print(f"📺 Showing song {idx + 1}: {setlist[idx]['title']}")
     draw_screen()
 
 def next_song():
-    global idx, last_song_change
+    global idx, last_song_change, scroll_offset, scroll_start_time
     with lock:
         idx = (idx + 1) % len(setlist)
     last_song_change = time.time()
+    scroll_offset = 0  # Reset scrolling for new song
+    scroll_start_time = None
     show_current()
 
 def prev_song():
-    global idx, last_song_change
+    global idx, last_song_change, scroll_offset, scroll_start_time
     with lock:
         idx = (idx - 1 + len(setlist)) % len(setlist)
     last_song_change = time.time()
+    scroll_offset = 0  # Reset scrolling for new song
+    scroll_start_time = None
     show_current()
 
 def goto_song(n):
-    global idx, last_song_change
+    global idx, last_song_change, scroll_offset, scroll_start_time
     with lock:
         if 0 <= n < len(setlist):
             idx = n
     last_song_change = time.time()
+    scroll_offset = 0  # Reset scrolling for new song
+    scroll_start_time = None
     show_current()
 
 def tcp_server(port=6789):
@@ -296,11 +298,18 @@ def handle_command(cmd):
         print("Unknown:", cmd)
 
 def main():
+    print("🚀 Starting setlist application...")
     load_setlist()
+    print("📋 Setlist loaded")
     setup_buttons()
+    print("🔘 Buttons configured")
     show_current()
+    print("📺 Initial display should be shown")
     threading.Thread(target=tcp_server, daemon=True).start()
+    print("🌐 TCP server started")
     threading.Thread(target=serial_listener, daemon=True).start()
+    print("📡 Serial listener started")
+    print("✅ Application running - press Ctrl+C to exit")
     try:
         while True:
             time.sleep(1)
