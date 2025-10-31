@@ -1,7 +1,42 @@
 [
   {
-    "title": "(no setlist)",
-    "key": "",
+    "title": "Amazing Grace",
+    "key": "G",
+    "capo": 0
+  },
+  {
+    "title": "House of the Rising Sun",
+    "key": "Am",
+    "capo": 0
+  },
+  {
+    "title": "Wonderwall",
+    "key": "Em7",
+    "capo": 2
+  },
+  {
+    "title": "Hotel California",
+    "key": "Bm",
+    "capo": 0
+  },
+  {
+    "title": "Blackbird",
+    "key": "G",
+    "capo": 3
+  },
+  {
+    "title": "Hallelujah",
+    "key": "C",
+    "capo": 0
+  },
+  {
+    "title": "Sweet Caroline",
+    "key": "C",
+    "capo": 0
+  },
+  {
+    "title": "Hey Jude",
+    "key": "F",
     "capo": 0
   }
 ]
