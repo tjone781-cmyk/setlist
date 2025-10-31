@@ -25,8 +25,8 @@ except Exception:
 
 SETLIST_PATH = os.path.join(os.path.dirname(__file__), "setlist.json")
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-LARGE_FONT_SIZE = 12
-SMALL_FONT_SIZE = 10
+LARGE_FONT_SIZE = 10  # Reduced from 12 for better fit
+SMALL_FONT_SIZE = 8   # Reduced from 10 for better fit
 
 if RGBMatrixOptions is None:
     raise SystemExit("rgbmatrix binding not found in venv; install it before running.")
@@ -97,20 +97,18 @@ def draw_screen():
         f_large = ImageFont.load_default()
         f_small = ImageFont.load_default()
     title = song.get("title", "Untitled")
-    draw.text((1, 0), title, font=f_large, fill=(255,255,255))
+    # Draw title in bright red for main focus
+    draw.text((1, 0), title, font=f_large, fill=(255,0,0))
     keycap = song.get("key", "")
     capo = song.get("capo", None)
     if capo:
         keycap = f"{keycap}  C{capo}" if keycap else f"C{capo}"
     w, h = _text_size(draw, keycap, f_small)
-    draw.text((options.cols - w - 1, 0), keycap, font=f_small, fill=(255,255,255))
+    # Draw key/capo info in orange-red for secondary info
+    draw.text((options.cols - w - 1, 0), keycap, font=f_small, fill=(255,64,0))
     nexttext = f"NEXT: {next_song.get('title','')}"
-    draw.text((1, 16), nexttext, font=f_small, fill=(200,200,200))
-    canvas.SetImage(img, 0, 0)
-    matrix.SwapOnVSync(canvas)
-
-    nexttext = f"NEXT: {next_song.get('title','')}"
-    draw.text((1, 16), nexttext, font=f_small, fill=(200,200,200))
+    # Draw next song in dim red for preview
+    draw.text((1, 16), nexttext, font=f_small, fill=(128,0,0))
 
     # Ensure a compatible Pillow Image object for rgbmatrix bindings
     try:
@@ -118,18 +116,18 @@ def draw_screen():
     except Exception:
         pass
 
+    # Handle Pillow 11+ compatibility issue - use pixel-by-pixel copy
+    # The new Pillow version removed the internal API that rgbmatrix uses
+    print("Using Pillow 11+ compatible pixel-by-pixel method")
     try:
-        # normal path
-        canvas.SetImage(img, 0, 0)
-    except AttributeError:
-        # Pillow internal layout changed on some versions — recreate from raw bytes
-        try:
-            raw = img.tobytes()
-            img2 = Image.frombytes("RGB", img.size, raw)
-            canvas.SetImage(img2, 0, 0)
-        except Exception as e:
-            print("Failed to SetImage:", repr(e))
-            return
+        for y in range(img.height):
+            for x in range(img.width):
+                r, g, b = img.getpixel((x, y))
+                canvas.SetPixel(x, y, r, g, b)
+        print("✅ Display updated successfully")
+    except Exception as e:
+        print(f"❌ Pixel-by-pixel method failed: {repr(e)}")
+        return
 
     matrix.SwapOnVSync(canvas)
 
@@ -225,7 +223,18 @@ def setup_buttons():
         t.start()
 
 def handle_command(cmd):
-    cmd = cmd.strip().upper()
+    cmd_original = cmd.strip()
+    cmd = cmd_original.upper()
+    
+    # Handle Bluetooth pedal inputs (check original case-sensitive command)
+    if "40(" in cmd_original:  # Down/Next button
+        next_song()
+        return
+    elif "38&" in cmd_original:  # Up/Previous button  
+        prev_song()
+        return
+    
+    # Handle text commands
     if cmd == "NEXT":
         next_song()
     elif cmd in ("PREV", "BACK"):

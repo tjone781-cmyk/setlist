@@ -45,8 +45,8 @@ except ImportError:
 # Configuration
 SETLIST_PATH = os.path.join(os.path.dirname(__file__), "setlist.json")
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-LARGE_FONT_SIZE = 12
-SMALL_FONT_SIZE = 10
+LARGE_FONT_SIZE = 10  # Reduced from 12 for better fit
+SMALL_FONT_SIZE = 8   # Reduced from 10 for better fit
 
 # Matrix configuration
 MATRIX_WIDTH = 64
@@ -72,10 +72,10 @@ class DevelopmentDisplay:
         # Create display frame
         print("┌" + "─" * (self.width - 2) + "┐")
         
-        # Title line
-        title_line = f" {title}"
+        # Title line (simulating bright red text)
+        title_line = f" 🔴 {title}"
         key_info = f"{key} C{capo}" if capo else key
-        key_line = f"{key_info:>10}"
+        key_line = f"🟠 {key_info:>8}" if key_info else ""
         
         # Pad title line and add key info
         title_display = title_line[:self.width - len(key_line) - 4] + key_line
@@ -85,8 +85,8 @@ class DevelopmentDisplay:
         # Separator
         print("│" + "─" * (self.width - 2) + "│")
         
-        # Next song line
-        next_line = f" NEXT: {next_title}"
+        # Next song line (simulating dim red text)
+        next_line = f" 🟤 NEXT: {next_title}"
         next_display = next_line[:self.width - 2].ljust(self.width - 2)
         print(f"│{next_display}│")
         
