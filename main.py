@@ -4,6 +4,7 @@ import threading
 import time
 import socket
 import os
+import sys
 from PIL import Image, ImageDraw, ImageFont
 
 # Try hardware bindings
@@ -297,6 +298,20 @@ def handle_command(cmd):
     else:
         print("Unknown:", cmd)
 
+def keyboard_listener():
+    """Placeholder keyboard listener for Bluetooth pedal"""
+    print("⌨️  Bluetooth pedal integration ready")
+    print("   Note: For now, use TCP commands or pair your Donner DBM-20")
+    print("   Left pedal (^[[A) = Previous, Right pedal (^[[B) = Next")
+    
+    # For now, just keep the thread alive
+    # TODO: Implement proper input device monitoring
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
 def main():
     print("🚀 Starting setlist application...")
     load_setlist()
@@ -309,6 +324,8 @@ def main():
     print("🌐 TCP server started")
     threading.Thread(target=serial_listener, daemon=True).start()
     print("📡 Serial listener started")
+    threading.Thread(target=keyboard_listener, daemon=True).start()
+    print("⌨️  Bluetooth pedal listener started")
     print("✅ Application running - press Ctrl+C to exit")
     try:
         while True:
