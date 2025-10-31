@@ -47,6 +47,11 @@ setlist = []
 idx = 0
 lock = threading.Lock()
 
+# Global variables for title scrolling
+scroll_offset = 0
+last_song_change = time.time()
+scroll_start_time = None
+
 BTN_NEXT_PIN = 17
 BTN_PREV_PIN = 27
 
@@ -84,10 +89,9 @@ def _text_size(draw, text, font):
         return (len(text) * 6, 10)
 
 def draw_screen():
-    global canvas, idx
+    global canvas, idx, scroll_offset, last_song_change, scroll_start_time
     with lock:
         song = setlist[idx]
-        next_song = setlist[(idx + 1) % len(setlist)]
     img = Image.new("RGB", (options.cols, options.rows))
     draw = ImageDraw.Draw(img)
     try:
@@ -96,19 +100,56 @@ def draw_screen():
     except Exception:
         f_large = ImageFont.load_default()
         f_small = ImageFont.load_default()
+    
     title = song.get("title", "Untitled")
-    # Draw title in bright red for main focus
-    draw.text((1, 0), title, font=f_large, fill=(255,0,0))
-    keycap = song.get("key", "")
-    capo = song.get("capo", None)
-    if capo:
-        keycap = f"{keycap}  C{capo}" if keycap else f"C{capo}"
-    w, h = _text_size(draw, keycap, f_small)
-    # Draw key/capo info in orange-red for secondary info
-    draw.text((options.cols - w - 1, 0), keycap, font=f_small, fill=(255,64,0))
-    nexttext = f"NEXT: {next_song.get('title','')}"
-    # Draw next song in dim red for preview
-    draw.text((1, 16), nexttext, font=f_small, fill=(128,0,0))
+    key = song.get("key", "")
+    capo = song.get("capo", 0)
+    
+    # Check if title fits on screen
+    title_width, title_height = _text_size(draw, title, f_large)
+    max_title_width = options.cols - 2  # Leave 1 pixel margin on each side
+    
+    current_time = time.time()
+    
+    # Reset scrolling when song changes
+    if current_time - last_song_change > 0.5:  # Song changed
+        scroll_offset = 0
+        scroll_start_time = None
+        last_song_change = current_time
+    
+    # Handle scrolling for long titles
+    if title_width > max_title_width:
+        # Start scrolling after 2 second delay
+        if scroll_start_time is None:
+            if current_time - last_song_change >= 2.0:
+                scroll_start_time = current_time
+        
+        if scroll_start_time is not None:
+            # Scroll slowly - move 1 pixel every 200ms
+            scroll_duration = current_time - scroll_start_time
+            scroll_offset = int(scroll_duration * 5)  # 5 pixels per second
+            
+            # Reset scroll when we've gone too far
+            if scroll_offset > title_width - max_title_width + 20:
+                scroll_offset = -(max_title_width // 2)  # Pause before restarting
+                scroll_start_time = current_time
+    else:
+        scroll_offset = 0
+    
+    # Draw title in bright red - with scrolling if needed
+    title_x = 1 - scroll_offset
+    draw.text((title_x, 1), title, font=f_large, fill=(255,0,0))
+    
+    # Draw key and capo info on second line in orange-red
+    if key or capo:
+        key_capo_text = f"Key: {key}" if key else ""
+        if capo:
+            if key:
+                key_capo_text += f"  Capo: {capo}"
+            else:
+                key_capo_text = f"Capo: {capo}"
+        
+        draw.text((1, 14), key_capo_text, font=f_small, fill=(255,64,0))
 
     # Ensure a compatible Pillow Image object for rgbmatrix bindings
     try:
@@ -135,22 +176,25 @@ def show_current():
     draw_screen()
 
 def next_song():
-    global idx
+    global idx, last_song_change
     with lock:
         idx = (idx + 1) % len(setlist)
+    last_song_change = time.time()
     show_current()
 
 def prev_song():
-    global idx
+    global idx, last_song_change
     with lock:
         idx = (idx - 1 + len(setlist)) % len(setlist)
+    last_song_change = time.time()
     show_current()
 
 def goto_song(n):
-    global idx
+    global idx, last_song_change
     with lock:
         if 0 <= n < len(setlist):
             idx = n
+    last_song_change = time.time()
     show_current()
 
 def tcp_server(port=6789):

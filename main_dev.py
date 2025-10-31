@@ -65,33 +65,37 @@ class DevelopmentDisplay:
         self.width = MATRIX_WIDTH
         self.height = MATRIX_HEIGHT
         
-    def show_screen(self, title, key, capo, next_title):
+    def show_screen(self, title, key, capo, next_title=None):
         """Display the current screen in console format"""
         os.system('clear' if os.name == 'posix' else 'cls')
         
         # Create display frame
         print("┌" + "─" * (self.width - 2) + "┐")
         
-        # Title line (simulating bright red text)
+        # Title line (simulating bright red text) - full width for title
         title_line = f" 🔴 {title}"
-        key_info = f"{key} C{capo}" if capo else key
-        key_line = f"🟠 {key_info:>8}" if key_info else ""
-        
-        # Pad title line and add key info
-        title_display = title_line[:self.width - len(key_line) - 4] + key_line
-        title_display = title_display.ljust(self.width - 2)
+        # Truncate or show scrolling indicator if too long
+        if len(title_line) > self.width - 2:
+            title_display = title_line[:self.width - 5] + "..."
+        else:
+            title_display = title_line.ljust(self.width - 2)
         print(f"│{title_display}│")
         
-        # Separator
-        print("│" + "─" * (self.width - 2) + "│")
+        # Key and capo line (simulating orange-red text)
+        if key or capo:
+            key_capo_text = f" 🟠 Key: {key}" if key else " 🟠 "
+            if capo:
+                if key:
+                    key_capo_text += f"  Capo: {capo}"
+                else:
+                    key_capo_text += f"Capo: {capo}"
+            key_capo_display = key_capo_text.ljust(self.width - 2)
+            print(f"│{key_capo_display}│")
+        else:
+            print("│" + " " * (self.width - 2) + "│")
         
-        # Next song line (simulating dim red text)
-        next_line = f" 🟤 NEXT: {next_title}"
-        next_display = next_line[:self.width - 2].ljust(self.width - 2)
-        print(f"│{next_display}│")
-        
-        # Empty lines
-        for _ in range(self.height - 6):
+        # Empty lines (no more NEXT song display)
+        for _ in range(self.height - 5):
             print("│" + " " * (self.width - 2) + "│")
             
         print("└" + "─" * (self.width - 2) + "┘")
@@ -180,7 +184,7 @@ def draw_screen():
     
     if DEVELOPMENT_MODE or display:
         # Development mode - console display
-        display.show_screen(title, key, capo, next_title)
+        display.show_screen(title, key, capo)
     else:
         # Hardware mode - RGB matrix
         img = Image.new("RGB", (options.cols, options.rows))
